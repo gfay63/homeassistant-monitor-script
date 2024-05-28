@@ -135,36 +135,64 @@ This PowerShell script monitors the status of a Home Assistant instance running 
 
 ## Task Scheduler Setup
 
-To set up the script to run via Task Scheduler on Windows:
+To set up the script to run at startup with a visible PowerShell window:
 
-1. **Open Task Scheduler**:
-    - Press `Windows + R`, type `taskschd.msc`, and press `Enter`.
+1. **Create a Shortcut to the PowerShell Script**:
+    - Navigate to the directory where your `RestartHomeAssistant.ps1` script is located.
+    - Right-click in the directory, select `New` > `Shortcut`.
+    - In the location field, enter:
+      ```shell
+      powershell.exe -NoExit -ExecutionPolicy Bypass -File "C:\scripts\home-assistant-monitor\RestartHomeAssistant.ps1"
+      ```
+    - Click `Next`.
+    - Name the shortcut (e.g., `RestartHomeAssistantShortcut`).
+    - Click `Finish`.
 
-2. **Create a New Task**:
-    - Click `Action` > `Create Task`.
+2. **Alternatively, Create a VBScript File**:
+    - Open Notepad and paste the following script:
+      ```vbscript
+      Set objShell = CreateObject("WScript.Shell")
+      objShell.Run "powershell.exe -NoExit -ExecutionPolicy Bypass -File ""C:\scripts\home-assistant-monitor\RestartHomeAssistant.ps1""", 1, false
+      ```
+    - Save the file as `LaunchHomeAssistantMonitor.vbs` in the same directory as your PowerShell script (e.g., `C:\scripts\home-assistant-monitor\`).
 
-3. **General Tab**:
-    - Name: `Home Assistant Monitor`
-    - Description: `Monitors and restarts Home Assistant VM if unresponsive`
-    - Select `Run whether user is logged on or not`
-    - Check `Run with highest privileges`
+3. **Add the Shortcut or VBScript to the Startup Folder**:
+    - Press `Windows + R`, type `shell:startup`, and press `Enter`. This will open the Startup folder.
+    - Copy the shortcut (`RestartHomeAssistantShortcut.lnk`) or the VBScript (`LaunchHomeAssistantMonitor.vbs`) to this Startup folder.
 
-4. **Triggers Tab**:
-    - Click `New` and set the trigger as needed, e.g., `At startup`.
+4. **Test the Startup Task**:
+    - Restart your computer to test if the script runs automatically at startup.
+    - The PowerShell window should appear when you log in, running the monitoring script.
+## Task Scheduler Setup
 
-5. **Actions Tab**:
-    - Click `New` and set the action as `Start a program`.
-    - Program/script: `powershell.exe`
-    - Add arguments: `-ExecutionPolicy Bypass -File "C:\scripts\home-assistant-monitor\RestartHomeAssistant.ps1"`
+To set up the script to run at startup with a visible PowerShell window:
 
-6. **Conditions Tab**:
-    - Adjust conditions as needed, e.g., start only if the computer is idle.
+1. **Create a Shortcut to the PowerShell Script**:
+    - Navigate to the directory where your `RestartHomeAssistant.ps1` script is located.
+    - Right-click in the directory, select `New` > `Shortcut`.
+    - In the location field, enter:
+      ```shell
+      powershell.exe -NoExit -ExecutionPolicy Bypass -File "C:\scripts\home-assistant-monitor\RestartHomeAssistant.ps1"
+      ```
+    - Click `Next`.
+    - Name the shortcut (e.g., `RestartHomeAssistantShortcut`).
+    - Click `Finish`.
 
-7. **Settings Tab**:
-    - Adjust settings as needed, e.g., allow the task to be run on demand.
+2. **Alternatively, Create a VBScript File**:
+    - Open Notepad and paste the following script:
+      ```vbscript
+      Set objShell = CreateObject("WScript.Shell")
+      objShell.Run "powershell.exe -NoExit -ExecutionPolicy Bypass -File ""C:\scripts\home-assistant-monitor\RestartHomeAssistant.ps1""", 1, false
+      ```
+    - Save the file as `LaunchHomeAssistantMonitor.vbs` in the same directory as your PowerShell script (e.g., `C:\scripts\home-assistant-monitor\`).
 
-8. **Save the Task**:
-    - Click `OK`, enter your password if prompted, and the task will be created.
+3. **Add the Shortcut or VBScript to the Startup Folder**:
+    - Press `Windows + R`, type `shell:startup`, and press `Enter`. This will open the Startup folder.
+    - Copy the shortcut (`RestartHomeAssistantShortcut.lnk`) or the VBScript (`LaunchHomeAssistantMonitor.vbs`) to this Startup folder.
+
+4. **Test the Startup Task**:
+    - Restart your computer to test if the script runs automatically at startup.
+    - The PowerShell window should appear when you log in, running the monitoring script.
 
 ## Example
 
