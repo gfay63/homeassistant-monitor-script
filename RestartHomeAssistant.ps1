@@ -2,10 +2,11 @@
 $homeAssistantUrl = "http://homeassistant.local:8123/"
 $vmName = "Home Assistant"  # Change to your VM's name
 $checkInterval = 5  # Interval in minutes
-$logFile = "C:\scripts\HomeAssistantRestart.log"  # Path to your log file
-$accessTokenFile = "C:\scripts\accessToken.txt"  # Path to your access token file
+$logFile = "C:\scripts\home-assistant-monitor\HomeAssistantRestart.log"  # Path to your log file
+$accessTokenFile = "C:\scripts\home-assistant-monitor\accessToken.txt"  # Path to your access token file
 $webhookUrl = "http://homeassistant.local:8123/api/webhook/notification-home-assistant-restarted-3X6GmJIr-ibjHmSPwkwMZU1B"  # URL for notification
 $startType = "gui"  # Change to "headless" for headless start
+$vboxManagePath = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"  # Path to VBoxManage
 
 # Read access token from file
 $accessToken = Get-Content -Path $accessTokenFile -Raw
@@ -45,19 +46,17 @@ function Send-Notification {
         errorInfo = $errorInfo
     } | ConvertTo-Json
 
-    $notificationSent = $false
-    while (-not $notificationSent) {
-        try {
-            $response = Invoke-WebRequest -Uri $webhookUrl -Method Post -Body $jsonPayload -ContentType "application/json"
-            if ($response.StatusCode -eq 200) {
-                Log-Message "Notification sent: $code - $message"
-                $notificationSent = $true
-            }
+    try {
+        $response = Invoke-WebRequest -Uri $webhookUrl -Method Post -Body $jsonPayload -ContentType "application/json"
+        if ($response.StatusCode -eq 200) {
+            Log-Message "Notification sent: $code - $message"
         }
-        catch {
-            Log-Message "Failed to send notification: $code - $message. Retrying in 10 seconds..."
-            Start-Sleep -Seconds 10
+        else {
+            Log-Message "Failed to send notification: $code - $message"
         }
+    }
+    catch {
+        Log-Message "Error sending notification: $code - $message. Error: $_"
     }
 }
 
@@ -77,7 +76,7 @@ function Check-HomeAssistant {
 
 function Check-VMRunning {
     try {
-        $vmStatus = & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" showvminfo $vmName --machinereadable | Select-String -Pattern '^VMState="running"$'
+        $vmStatus = & "$vboxManagePath" showvminfo $vmName --machinereadable | Select-String -Pattern '^VMState="running"$'
         if ($vmStatus) {
             return $true
         }
@@ -94,9 +93,9 @@ function Restart-VirtualBoxVM {
 
     while (-not $stopped -and $stopAttempts -lt $maxStopAttempts) {
         try {
-            & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm $vmName acpipowerbutton
+            & "$vboxManagePath" controlvm $vmName acpipowerbutton
             Start-Sleep -Seconds 30  # Give the VM some time to shut down gracefully
-            $vmStatus = & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" showvminfo $vmName --machinereadable | Select-String -Pattern '^VMState="poweroff"$'
+            $vmStatus = & "$vboxManagePath" showvminfo $vmName --machinereadable | Select-String -Pattern '^VMState="poweroff"$'
 
             if ($vmStatus) {
                 $stopped = $true
@@ -116,7 +115,7 @@ function Restart-VirtualBoxVM {
 
     if ($stopped) {
         try {
-            & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm $vmName --type $startType
+            & "$vboxManagePath" startvm $vmName --type $startType
             $lastRestart = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
             Log-Message "Successfully restarted VirtualBox VM: $vmName"
 
@@ -158,7 +157,7 @@ function Restart-VirtualBoxVM {
 function Shutdown-VirtualBoxVM {
     Log-Message "Shutting down VirtualBox VM: $vmName"
     try {
-        & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm $vmName acpipowerbutton
+        & "$vboxManagePath" controlvm $vmName acpipowerbutton
         Log-Message "VM $vmName shutdown initiated."
         Send-Notification -code "shutdown" -message "Home Assistant VM is shutting down"
     }

@@ -723,3 +723,19 @@
 2024-05-28 06:08:21 - Notification sent: launched - Script launched
 2024-05-28 06:08:22 - Home Assistant is responsive at startup.
 2024-05-28 06:08:22 - Home Assistant is responsive.
+2024-05-28 06:12:39 - Manual shutdown triggered.
+2024-05-28 06:12:39 - Shutting down VirtualBox VM: Home Assistant
+2024-05-28 06:12:39 - VM Home Assistant shutdown initiated.
+2024-05-28 06:12:39 - Notification sent: shutdown - Home Assistant VM is shutting down
+2024-05-28 06:16:21 - Home Assistant monitoring script started.
+2024-05-28 06:16:23 - Failed to send notification: launched - Script launched. Retrying in 10 seconds...
+2024-05-28 06:16:36 - Failed to send notification: launched - Script launched. Retrying in 10 seconds...
+2024-05-28 06:28:47 - Home Assistant monitoring script started.
+2024-05-28 06:28:49 - Error sending notification: launched - Script launched. Error: The remote name could not be resolved: 'homeassistant.local'
+2024-05-28 06:28:52 - Home Assistant is not responsive at startup.
+2024-05-28 06:28:52 - Home Assistant did not become responsive after waiting. Restarting the VM.
+2024-05-28 06:28:52 - Attempting to restart VirtualBox VM: Home Assistant
+2024-05-28 06:29:29 - Successfully restarted VirtualBox VM: Home Assistant
+2024-05-28 06:31:20 - Home Assistant became responsive at 2024-05-28 06:29:29
+2024-05-28 06:36:20 - Notification sent: harestart - Home Assistant restarted at 2024-05-28 06:29:29
+2024-05-28 06:36:20 - Home Assistant is responsive.
