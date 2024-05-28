@@ -3,9 +3,12 @@ $homeAssistantUrl = "http://homeassistant.local:8123/"
 $vmName = "Home Assistant"  # Change to your VM's name
 $checkInterval = 5  # Interval in minutes
 $logFile = "C:\scripts\HomeAssistantRestart.log"  # Path to your log file
+$accessTokenFile = "C:\scripts\accessToken.txt"  # Path to your access token file
 $webhookUrl = "http://homeassistant.local:8123/api/webhook/notification-home-assistant-restarted-3X6GmJIr-ibjHmSPwkwMZU1B"  # URL for notification
 $startType = "gui"  # Change to "headless" for headless start
-$accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJiZmFlMjhlZjZhMzg0NTYzYjE0MDE0OTg1Yjk5Y2FjNiIsImlhdCI6MTcxNjc2MTM3MywiZXhwIjoyMDMyMTIxMzczfQ.fMH4t1ihSeihVNbTxKDLJxD9suRoIqtZyLIwfuhJtdQ"  # Replace with your long-lived access token
+
+# Read access token from file
+$accessToken = Get-Content -Path $accessTokenFile -Raw
 
 $checkCount = 0
 $restartCount = 0
@@ -72,6 +75,18 @@ function Check-HomeAssistant {
     }
 }
 
+function Check-VMRunning {
+    try {
+        $vmStatus = & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" showvminfo $vmName --machinereadable | Select-String -Pattern '^VMState="running"$'
+        if ($vmStatus) {
+            return $true
+        }
+    }
+    catch {
+        return $false
+    }
+}
+
 function Restart-VirtualBoxVM {
     Log-Message "Attempting to restart VirtualBox VM: $vmName"
     $stopAttempts = 0
@@ -107,6 +122,7 @@ function Restart-VirtualBoxVM {
 
             # Wait until Home Assistant is fully operational
             $haResponsive = $false
+            $restartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
             while (-not $haResponsive) {
                 if (Check-HomeAssistant) {
                     $haResponsive = $true
@@ -116,7 +132,9 @@ function Restart-VirtualBoxVM {
                 }
             }
 
-            Send-Notification -code "harestart" -message "Home Assistant restarted"
+            Log-Message "Home Assistant became responsive at $restartTime"
+            Start-Sleep -Seconds 300  # Wait 5 minutes before sending the notification
+            Send-Notification -code "harestart" -message "Home Assistant restarted at $restartTime"
         }
         catch {
             $errorMessage = "Error starting VM: $_"
@@ -137,6 +155,23 @@ function Restart-VirtualBoxVM {
     }
 }
 
+function Shutdown-VirtualBoxVM {
+    Log-Message "Shutting down VirtualBox VM: $vmName"
+    try {
+        & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" controlvm $vmName acpipowerbutton
+        Log-Message "VM $vmName shutdown initiated."
+        Send-Notification -code "shutdown" -message "Home Assistant VM is shutting down"
+    }
+    catch {
+        $errorMessage = "Error shutting down VM: $_"
+        Log-Message $errorMessage
+        $errorCount++
+        $lastError = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $lastErrorMessage = $_.Exception.Message
+        Send-Notification -code "error" -message "HA Script Error - $errorMessage" -errorInfo $errorMessage
+    }
+}
+
 function Update-Display {
     $consoleOutput = @"
 Script Start: $scriptStart
@@ -147,7 +182,7 @@ Last Update: $lastUpdate
 Last Restart: $lastRestart
 Last Error: $lastError - $lastErrorMessage
 
-Press 'R' to force a restart. Press Ctrl+C to exit...
+Press 'R' to force a restart. Press 'S' to shutdown. Press Ctrl+C to exit...
 "@
     Clear-Host
     Write-Output $consoleOutput
@@ -156,6 +191,39 @@ Press 'R' to force a restart. Press Ctrl+C to exit...
 # Log script launch
 Log-Message "Home Assistant monitoring script started."
 Send-Notification -code "launched" -message "Script launched"
+
+# Initial check for Home Assistant responsiveness
+$haResponsive = Check-HomeAssistant
+
+if ($haResponsive) {
+    Log-Message "Home Assistant is responsive at startup."
+}
+else {
+    Log-Message "Home Assistant is not responsive at startup."
+    $vmRunning = Check-VMRunning
+
+    if ($vmRunning) {
+        Log-Message "VM is running. Checking HA responsiveness every minute for up to 5 minutes."
+        $maxWaitTime = 5
+        $waitedTime = 0
+
+        while ($waitedTime -lt $maxWaitTime -and -not $haResponsive) {
+            Start-Sleep -Seconds 60
+            $waitedTime++
+            $haResponsive = Check-HomeAssistant
+            if ($haResponsive) {
+                Log-Message "Home Assistant became responsive after $waitedTime minutes."
+            }
+        }
+    }
+
+    if (-not $haResponsive) {
+        Log-Message "Home Assistant did not become responsive after waiting. Restarting the VM."
+        Restart-VirtualBoxVM
+    }
+}
+
+Update-Display
 
 while ($true) {
     $checkCount++
@@ -192,6 +260,11 @@ while ($true) {
                 $lastRestart = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
                 Log-Message "Manual restart triggered."
                 Restart-VirtualBoxVM
+                Update-Display
+            }
+            elseif ($key -eq 'S') {
+                Log-Message "Manual shutdown triggered."
+                Shutdown-VirtualBoxVM
                 Update-Display
             }
         }
