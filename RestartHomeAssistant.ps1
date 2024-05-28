@@ -14,6 +14,7 @@ $accessToken = Get-Content -Path $accessTokenFile -Raw
 $checkCount = 0
 $restartCount = 0
 $errorCount = 0
+$consecutiveFailures = 0
 $scriptStart = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $lastUpdate = $null
 $lastRestart = $null
@@ -21,6 +22,7 @@ $lastError = $null
 $lastErrorMessage = $null
 $maxStopAttempts = 5
 $stopRetryInterval = 1  # in minutes
+$maxConsecutiveFailures = 3  # Number of consecutive failures before restarting VM
 
 function Log-Message {
     param (
@@ -230,12 +232,19 @@ while ($true) {
 
     try {
         if (-not (Check-HomeAssistant)) {
-            $restartCount++
-            Log-Message "Home Assistant is unresponsive. Restarting the VM."
-            Restart-VirtualBoxVM
+            $consecutiveFailures++
+            Log-Message "Home Assistant is unresponsive. Consecutive failures: $consecutiveFailures."
+
+            if ($consecutiveFailures -ge $maxConsecutiveFailures) {
+                $restartCount++
+                Log-Message "Home Assistant is unresponsive for $consecutiveFailures consecutive checks. Restarting the VM."
+                Restart-VirtualBoxVM
+                $consecutiveFailures = 0  # Reset consecutive failures after a restart
+            }
         }
         else {
             Log-Message "Home Assistant is responsive."
+            $consecutiveFailures = 0  # Reset consecutive failures on successful check
         }
     }
     catch {
