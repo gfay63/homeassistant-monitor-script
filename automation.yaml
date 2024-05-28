@@ -1,0 +1,53 @@
+alias: "Notification: Home Assistant Events"
+description: Handles various Home Assistant events and sends notifications
+trigger:
+  - platform: webhook
+    allowed_methods:
+      - POST
+      - PUT
+    local_only: true
+    webhook_id: notification-home-assistant-restarted-3X6GmJIr-ibjHmSPwkwMZU1B
+condition: []
+action:
+  - variables:
+      notification_code: "{{ trigger.json.code }}"
+      notification_message: "{{ trigger.json.message }}"
+      notification_timestamp: "{{ trigger.json.timestamp }}"
+      notification_error_info: "{{ trigger.json.errorInfo | default('No additional information') }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ notification_code == 'launched' }}"
+        sequence:
+          - service: notify.mobile_app_gfay_iphone13pro
+            data:
+              message: Script launched at {{ notification_timestamp }}
+      - conditions:
+          - condition: template
+            value_template: "{{ notification_code == 'harestart' }}"
+        sequence:
+          - service: notify.mobile_app_gfay_iphone13pro
+            data:
+              message: Home Assistant restarted at {{ notification_timestamp }}
+      - conditions:
+          - condition: template
+            value_template: "{{ notification_code == 'error' }}"
+        sequence:
+          - service: notify.mobile_app_gfay_iphone13pro
+            data:
+              message: >-
+                Error occurred at {{ notification_timestamp }}: {{
+                notification_message }}
+              data:
+                errorInfo: "{{ notification_error_info }}"
+  - condition: template
+    value_template: "{{ notification_code not in ['launched', 'harestart', 'error'] }}"
+  - service: notify.mobile_app_gfay_iphone13pro
+    data:
+      message: >-
+        Unknown notification code {{ notification_code }} received at {{
+        notification_timestamp }}
+  - service: rest_command.acknowledge_webhook
+    data:
+      response: success
+mode: single
