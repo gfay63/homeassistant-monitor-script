@@ -228,6 +228,8 @@ func clearScreen() {
 	fmt.Print("\033[H\033[2J")
 }
 
+// Replace the startup check logic with the correct waiting mechanism
+
 func main() {
 	checkCount = 0
 	restartCount = 0
