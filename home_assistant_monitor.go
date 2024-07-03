@@ -19,7 +19,7 @@ import (
 const (
 	homeAssistantURL    = "http://homeassistant.local:8123/"
 	vmName              = "Home Assistant"
-	checkInterval       = 5 * time.Minute
+	checkInterval       = 1 * time.Minute
 	logFile             = "C:\\scripts\\home-assistant-monitor\\HomeAssistantRestart.log"
 	accessTokenFile     = "C:\\scripts\\home-assistant-monitor\\accessToken.txt"
 	webhookURL          = "http://homeassistant.local:8123/api/webhook/notification-home-assistant-restarted-3X6GmJIr-ibjHmSPwkwMZU1B"
@@ -27,7 +27,7 @@ const (
 	vboxManagePath      = "C:\\Program Files\\Oracle\\VirtualBox\\VBoxManage.exe"
 	maxStopAttempts     = 5
 	stopRetryInterval   = 1 * time.Minute
-	checkResponsiveMax  = 3
+	checkResponsiveMax  = 5
 	checkResponsiveWait = 1 * time.Minute
 )
 
@@ -41,6 +41,7 @@ var (
 	lastError    string
 	lastErrorMsg string
 	dryRun       bool
+	debug        bool
 )
 
 type NotificationPayload struct {
@@ -52,10 +53,14 @@ type NotificationPayload struct {
 
 func init() {
 	flag.BoolVar(&dryRun, "dry-run", false, "Run in dry-run mode")
+	flag.BoolVar(&debug, "debug", false, "Enable debug logging")
 	flag.Parse()
 }
 
 func logMessage(message string) {
+	if strings.Contains(message, "Home Assistant is responsive.") && !debug {
+		return
+	}
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	logEntry := fmt.Sprintf("%s - %s", timestamp, message)
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -228,7 +233,7 @@ func main() {
 	restartCount = 0
 	errorCount = 0
 
-	logMessage("Home Assistant monitoring script started.")
+	logMessage("********** Home Assistant monitoring script started **********")
 	sendNotification("launched", "Script launched", "")
 
 	// Increment the check count before the initial check
@@ -266,10 +271,23 @@ func main() {
 		for range ticker.C {
 			checkCount++
 			lastUpdate = time.Now().Format("2006-01-02 15:04:05")
-			if !checkHomeAssistant() {
-				restartCount++
-				logMessage(fmt.Sprintf("%sHome Assistant is unresponsive. Restarting the VM.", dryRunPrefix()))
-				restartVirtualBoxVM()
+			haResponsive = checkHomeAssistant() // Reinitialize haResponsive here
+			if !haResponsive {
+				logMessage(fmt.Sprintf("%sHome Assistant is unresponsive. Checking responsiveness for %d minutes.", dryRunPrefix(), checkResponsiveMax))
+				waitedTime := 0
+				for waitedTime < checkResponsiveMax && !haResponsive {
+					time.Sleep(checkResponsiveWait)
+					waitedTime++
+					haResponsive = checkHomeAssistant()
+					if haResponsive {
+						logMessage(fmt.Sprintf("%sHome Assistant became responsive after %d minutes.", dryRunPrefix(), waitedTime))
+					}
+				}
+				if !haResponsive {
+					restartCount++
+					logMessage(fmt.Sprintf("%sHome Assistant did not become responsive after waiting. Restarting the VM.", dryRunPrefix()))
+					restartVirtualBoxVM()
+				}
 			} else {
 				logMessage(fmt.Sprintf("%sHome Assistant is responsive.", dryRunPrefix()))
 			}
