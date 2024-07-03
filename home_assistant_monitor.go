@@ -58,9 +58,6 @@ func init() {
 }
 
 func logMessage(message string) {
-	if strings.Contains(message, "Home Assistant is responsive.") && !debug {
-		return
-	}
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	logEntry := fmt.Sprintf("%s - %s", timestamp, message)
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -189,7 +186,7 @@ func restartVirtualBoxVM() {
 			}
 		}
 		logMessage(fmt.Sprintf("%sHome Assistant became responsive at %s", dryRunPrefix(), lastRestart))
-		time.Sleep(5 * time.Minute)
+		time.Sleep(3 * time.Minute)
 		sendNotification("harestart", fmt.Sprintf("Home Assistant restarted at %s", lastRestart), "")
 	} else {
 		errorMessage := fmt.Sprintf("%sFailed to stop VM after %d attempts.", dryRunPrefix(), maxStopAttempts)
@@ -228,8 +225,6 @@ func clearScreen() {
 	fmt.Print("\033[H\033[2J")
 }
 
-// Replace the startup check logic with the correct waiting mechanism
-
 func main() {
 	checkCount = 0
 	restartCount = 0
@@ -257,6 +252,8 @@ func main() {
 				haResponsive = checkHomeAssistant()
 				if haResponsive {
 					logMessage(fmt.Sprintf("%sHome Assistant became responsive after %d minutes.", dryRunPrefix(), waitedTime))
+				} else {
+					logMessage(fmt.Sprintf("%sHome Assistant is still not responsive after %d minutes.", dryRunPrefix(), waitedTime))
 				}
 			}
 		}
@@ -273,16 +270,18 @@ func main() {
 		for range ticker.C {
 			checkCount++
 			lastUpdate = time.Now().Format("2006-01-02 15:04:05")
-			haResponsive = checkHomeAssistant() // Reinitialize haResponsive here
-			if !haResponsive {
-				logMessage(fmt.Sprintf("%sHome Assistant is unresponsive. Checking responsiveness for %d minutes.", dryRunPrefix(), checkResponsiveMax))
+			if !checkHomeAssistant() {
+				logMessage(fmt.Sprintf("%sHome Assistant is unresponsive. Checking responsiveness for 5 minutes.", dryRunPrefix()))
 				waitedTime := 0
+				haResponsive := false
 				for waitedTime < checkResponsiveMax && !haResponsive {
 					time.Sleep(checkResponsiveWait)
 					waitedTime++
 					haResponsive = checkHomeAssistant()
 					if haResponsive {
 						logMessage(fmt.Sprintf("%sHome Assistant became responsive after %d minutes.", dryRunPrefix(), waitedTime))
+					} else {
+						logMessage(fmt.Sprintf("%sHome Assistant is still not responsive after %d minutes.", dryRunPrefix(), waitedTime))
 					}
 				}
 				if !haResponsive {
@@ -291,7 +290,9 @@ func main() {
 					restartVirtualBoxVM()
 				}
 			} else {
-				logMessage(fmt.Sprintf("%sHome Assistant is responsive.", dryRunPrefix()))
+				if debug {
+					logMessage(fmt.Sprintf("%sHome Assistant is responsive.", dryRunPrefix()))
+				}
 			}
 			updateDisplay()
 		}
