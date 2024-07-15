@@ -152,6 +152,7 @@ func restartVirtualBoxVM() {
 	stopAttempts := 0
 	stopped := false
 
+	// Attempt to stop the VM using ACPI power button
 	for !stopped && stopAttempts < maxStopAttempts {
 		cmd := exec.Command(vboxManagePath, "controlvm", vmName, "acpipowerbutton")
 		if !dryRun {
@@ -164,8 +165,30 @@ func restartVirtualBoxVM() {
 			stopped = true
 		} else {
 			stopAttempts++
-			logMessage(fmt.Sprintf("%sFailed to stop VM. Attempt %d of %d.", dryRunPrefix(), stopAttempts, maxStopAttempts))
+			logMessage(fmt.Sprintf("%sFailed to stop VM using ACPI. Attempt %d of %d.", dryRunPrefix(), stopAttempts, maxStopAttempts))
 			time.Sleep(stopRetryInterval)
+		}
+	}
+
+	// If ACPI attempts failed, try a full shutdown
+	if !stopped {
+		logMessage(fmt.Sprintf("%sACPI attempts failed. Attempting full shutdown.", dryRunPrefix()))
+		stopAttempts = 0
+		for !stopped && stopAttempts < maxStopAttempts {
+			cmd := exec.Command(vboxManagePath, "controlvm", vmName, "poweroff")
+			if !dryRun {
+				_ = cmd.Run()
+			}
+			time.Sleep(30 * time.Second)
+			cmd = exec.Command(vboxManagePath, "showvminfo", vmName, "--machinereadable")
+			output, _ := cmd.Output()
+			if strings.Contains(string(output), `VMState="poweroff"`) {
+				stopped = true
+			} else {
+				stopAttempts++
+				logMessage(fmt.Sprintf("%sFailed to stop VM using full shutdown. Attempt %d of %d.", dryRunPrefix(), stopAttempts, maxStopAttempts))
+				time.Sleep(stopRetryInterval)
+			}
 		}
 	}
 
@@ -189,7 +212,7 @@ func restartVirtualBoxVM() {
 		time.Sleep(3 * time.Minute)
 		sendNotification("harestart", fmt.Sprintf("Home Assistant restarted at %s", lastRestart), "")
 	} else {
-		errorMessage := fmt.Sprintf("%sFailed to stop VM after %d attempts.", dryRunPrefix(), maxStopAttempts)
+		errorMessage := fmt.Sprintf("%sFailed to stop VM after 10 total attempts (5 ACPI, 5 full shutdown).", dryRunPrefix())
 		logMessage(errorMessage)
 		errorCount++
 		lastError = time.Now().Format("2006-01-02 15:04:05")
