@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/eiannone/keyboard"
@@ -42,6 +43,8 @@ var (
 	lastErrorMsg string
 	dryRun       bool
 	debug        bool
+	restartMutex sync.Mutex
+	isRestarting bool
 )
 
 type NotificationPayload struct {
@@ -143,6 +146,15 @@ func shutdownVirtualBoxVM() {
 }
 
 func restartVirtualBoxVM() {
+	if !restartMutex.TryLock() {
+		logMessage(fmt.Sprintf("%sRestart already in progress. Skipping this restart attempt.", dryRunPrefix()))
+		return
+	}
+	defer restartMutex.Unlock()
+
+	isRestarting = true
+	defer func() { isRestarting = false }()
+
 	logMessage(fmt.Sprintf("%sAttempting to restart VirtualBox VM: %s", dryRunPrefix(), vmName))
 	if dryRun {
 		logMessage("Dry run mode: No actual restart will be performed.")
@@ -201,16 +213,30 @@ func restartVirtualBoxVM() {
 		logMessage(fmt.Sprintf("%sSuccessfully restarted VirtualBox VM: %s", dryRunPrefix(), vmName))
 
 		haResponsive := false
-		for !haResponsive {
+		responsiveStart := time.Now()
+		for !haResponsive && time.Since(responsiveStart) < 10*time.Minute {
 			if checkHomeAssistant() {
 				haResponsive = true
+				logMessage(fmt.Sprintf("%sHome Assistant became responsive after %v", dryRunPrefix(), time.Since(responsiveStart)))
 			} else {
-				time.Sleep(10 * time.Second)
+				time.Sleep(30 * time.Second)
 			}
 		}
-		logMessage(fmt.Sprintf("%sHome Assistant became responsive at %s", dryRunPrefix(), lastRestart))
-		time.Sleep(3 * time.Minute)
-		sendNotification("harestart", fmt.Sprintf("Home Assistant restarted at %s", lastRestart), "")
+
+		if haResponsive {
+			time.Sleep(5 * time.Minute)
+			if checkHomeAssistant() {
+				sendNotification("harestart", fmt.Sprintf("Home Assistant restarted at %s and is stable", lastRestart), "")
+			} else {
+				logMessage(fmt.Sprintf("%sHome Assistant became unresponsive after initial recovery", dryRunPrefix()))
+			}
+		} else {
+			logMessage(fmt.Sprintf("%sHome Assistant did not become responsive within 10 minutes of restart", dryRunPrefix()))
+			errorCount++
+			lastError = time.Now().Format("2006-01-02 15:04:05")
+			lastErrorMsg = "HA did not become responsive after restart"
+			sendNotification("error", "HA did not become responsive after restart", "Home Assistant failed to become responsive within 10 minutes of restart")
+		}
 	} else {
 		errorMessage := fmt.Sprintf("%sFailed to stop VM after 10 total attempts (5 ACPI, 5 full shutdown).", dryRunPrefix())
 		logMessage(errorMessage)
@@ -307,7 +333,7 @@ func main() {
 						logMessage(fmt.Sprintf("%sHome Assistant is still not responsive after %d minutes.", dryRunPrefix(), waitedTime))
 					}
 				}
-				if !haResponsive {
+				if !haResponsive && !isRestarting {
 					restartCount++
 					logMessage(fmt.Sprintf("%sHome Assistant did not become responsive after waiting. Restarting the VM.", dryRunPrefix()))
 					restartVirtualBoxVM()
@@ -341,16 +367,24 @@ func main() {
 
 		switch char {
 		case 'R', 'r':
-			restartCount++
-			lastRestart = time.Now().Format("2006-01-02 15:04:05")
-			logMessage("Manual restart triggered.")
-			restartVirtualBoxVM()
-			updateDisplay()
+			if !isRestarting {
+				restartCount++
+				lastRestart = time.Now().Format("2006-01-02 15:04:05")
+				logMessage("Manual restart triggered.")
+				restartVirtualBoxVM()
+				updateDisplay()
+			} else {
+				logMessage("Restart already in progress. Skipping manual restart.")
+			}
 		case 'S', 's':
-			logMessage("Manual shutdown triggered.")
-			shutdownVirtualBoxVM()
-			sendNotification("shutdown", "Home Assistant VM is shutting down", "")
-			updateDisplay()
+			if !isRestarting {
+				logMessage("Manual shutdown triggered.")
+				shutdownVirtualBoxVM()
+				sendNotification("shutdown", "Home Assistant VM is shutting down", "")
+				updateDisplay()
+			} else {
+				logMessage("Cannot shutdown while restart is in progress.")
+			}
 		}
 	}
 }
